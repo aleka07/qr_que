@@ -1,0 +1,105 @@
+.qr-display {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  animation: gradientShift 10s ease infinite;
+}
+
+@keyframes gradientShift {
+  0%, 100% {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  }
+  50% {
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  }
+}
+
+.qr-container {
+  background: white;
+  border-radius: 32px;
+  padding: 60px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.order-number {
+  font-size: 72px;
+  font-weight: bold;
+  color: #667eea;
+  margin-bottom: 30px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.qr-wrapper {
+  margin: 0 auto 30px;
+  padding: 20px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
+
+.qr-wrapper canvas {
+  display: block;
+}
+
+.instructions {
+  margin-bottom: 30px;
+  color: #333;
+}
+
+.instructions h2 {
+  font-size: 32px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.instructions p {
+  font-size: 20px;
+  color: #666;
+}
+
+.timer-container {
+  position: relative;
+  width: 400px;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.timer-progress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #28a745, #20c997);
+  transition: width 1s linear;
+  border-radius: 4px;
+}
+
+.timer-text {
+  position: absolute;
+  top: -30px;
+  right: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #666;
+}

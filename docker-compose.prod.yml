@@ -1,0 +1,37 @@
+version: '3.8'
+
+# Production-specific overrides
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    restart: always
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql+asyncpg://qr_user:qr_password@db:5432/qr_que_db
+      - REDIS_URL=redis://redis:6379
+
+  db:
+    restart: always
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    restart: always
+
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: qr_que_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend/staff/dist:/var/www/staff:ro
+      - ./frontend/display/dist:/var/www/display:ro
+      - ./frontend/client/dist:/var/www/client:ro
+    depends_on:
+      - backend
+    networks:
+      - qr_network
+    restart: always

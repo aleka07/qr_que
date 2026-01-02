@@ -1,0 +1,109 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transition: background 0.5s ease;
+}
+
+.app.ready {
+  background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+  animation: flashGreen 2s ease-in-out infinite;
+}
+
+@keyframes flashGreen {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.app.loading,
+.app.error {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  color: white;
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 6px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-icon {
+  font-size: 80px;
+  margin-bottom: 20px;
+}
+
+.app.error h2 {
+  font-size: 32px;
+  margin-bottom: 12px;
+}
+
+.app.error p {
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.app-header {
+  text-align: center;
+  color: white;
+  padding: 30px 20px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.app-header h1 {
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.app-header p {
+  font-size: 16px;
+  opacity: 0.9;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.app-footer {
+  text-align: center;
+  color: white;
+  padding: 30px 20px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.app-footer p {
+  font-size: 14px;
+  opacity: 0.8;
+  margin: 4px 0;
+}
+
+@media (max-width: 600px) {
+  .app-header h1 {
+    font-size: 28px;
+  }
+  
+  .app-header p {
+    font-size: 14px;
+  }
+}

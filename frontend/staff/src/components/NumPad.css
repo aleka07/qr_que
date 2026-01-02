@@ -1,0 +1,105 @@
+.numpad-container {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-width: 400px;
+}
+
+.numpad-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.device-selector {
+  margin-bottom: 20px;
+}
+
+.device-selector label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #555;
+}
+
+.device-selector select {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.device-selector select:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.numpad-display {
+  margin-bottom: 20px;
+}
+
+.numpad-display input {
+  width: 100%;
+  padding: 16px;
+  font-size: 32px;
+  font-weight: bold;
+  text-align: center;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.numpad-button {
+  padding: 20px;
+  font-size: 24px;
+  font-weight: 600;
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.numpad-button:hover {
+  background: #f5f5f5;
+  border-color: #007bff;
+}
+
+.numpad-button:active {
+  transform: scale(0.95);
+}
+
+.numpad-submit {
+  width: 100%;
+  padding: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.numpad-submit:hover:not(:disabled) {
+  background: #0056b3;
+}
+
+.numpad-submit:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
