@@ -1,22 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 import logging
 
 from app.database import get_db
-from app.models import OrderStatus
+from app.models import OrderStatus, User, UserRole
 from app.schemas import (
     OrderCreate,
     OrderResponse,
     OrderPublicResponse,
     OrderUpdate,
     QRDisplayMessage,
-    StatusUpdateMessage
+    StatusUpdateMessage,
+    LocationPublicResponse
 )
 from app import crud
 from app.websocket import manager
 from app.utils import generate_tracking_url
+from app.auth import get_current_user, get_current_user_required, check_location_access
 
 logger = logging.getLogger(__name__)
 
@@ -26,14 +28,52 @@ router = APIRouter()
 @router.post("/orders", response_model=OrderResponse, status_code=201)
 async def create_order(
     order_data: OrderCreate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     Create a new order and notify the display device to show QR code.
+    Requires authentication with location access.
     """
     try:
+        # Determine location_id
+        location_id = order_data.location_id
+        
+        if current_user:
+            # Use user's location if not specified
+            if not location_id:
+                if current_user.location_id:
+                    location_id = current_user.location_id
+                elif current_user.role == UserRole.ADMIN:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="Admin must specify location_id"
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="User has no assigned location"
+                    )
+            
+            # Check access to location
+            if not check_location_access(current_user, location_id):
+                # For owner, check organization
+                if current_user.role == UserRole.OWNER:
+                    location = await crud.get_location_by_id(db, location_id)
+                    if not location or location.organization_id != current_user.organization_id:
+                        raise HTTPException(status_code=403, detail="Access denied to this location")
+                else:
+                    raise HTTPException(status_code=403, detail="Access denied to this location")
+        else:
+            # Anonymous access - require location_id
+            if not location_id:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="location_id is required"
+                )
+        
         # Create order in database
-        order = await crud.create_order(db, order_data)
+        order = await crud.create_order(db, order_data, location_id)
         
         # Generate tracking URL
         tracking_url = generate_tracking_url(order.token)
@@ -46,16 +86,18 @@ async def create_order(
         )
         await manager.send_to_display(order.device_id, qr_message.dict())
         
-        # Broadcast new order to all staff
+        # Broadcast new order to all staff (for this location)
         await manager.broadcast_to_staff({
             "type": "NEW_ORDER",
             "order": OrderResponse.model_validate(order).model_dump(mode='json')
-        })
+        }, location_id=str(location_id))
         
         logger.info(f"Created order {order.human_id} with token {order.token}")
         
         return order
     
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error creating order: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -64,25 +106,70 @@ async def create_order(
 @router.get("/orders", response_model=List[OrderResponse])
 async def get_orders(
     status: OrderStatus = None,
-    db: AsyncSession = Depends(get_db)
+    location_id: Optional[UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     Get list of orders with optional status filter.
+    Filtered by user's access level.
     """
-    orders = await crud.get_orders(db, status=status)
+    # Determine filters based on user access
+    filter_location_id = location_id
+    filter_organization_id = None
+    
+    if current_user:
+        if current_user.role == UserRole.ADMIN:
+            # Admin can see everything, use provided filters
+            pass
+        elif current_user.role == UserRole.OWNER:
+            # Owner sees all orders in their organization
+            filter_organization_id = current_user.organization_id
+        else:
+            # Manager/Staff see only their location's orders
+            filter_location_id = current_user.location_id
+    
+    orders = await crud.get_orders(
+        db, 
+        status=status, 
+        location_id=filter_location_id,
+        organization_id=filter_organization_id
+    )
     return orders
 
 
 @router.get("/orders/active", response_model=List[OrderResponse])
 async def get_active_orders(
     device_id: str = None,
-    db: AsyncSession = Depends(get_db)
+    location_id: Optional[UUID] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     Get all active orders (pending, scanned, preparing, ready).
-    Optional device_id filter.
+    Optional device_id filter. Filtered by user's access level.
     """
-    orders = await crud.get_active_orders(db, device_id=device_id)
+    # Determine filters based on user access
+    filter_location_id = location_id
+    filter_organization_id = None
+    
+    if current_user:
+        if current_user.role == UserRole.ADMIN:
+            # Admin can see everything
+            pass
+        elif current_user.role == UserRole.OWNER:
+            # Owner sees all orders in their organization
+            filter_organization_id = current_user.organization_id
+        else:
+            # Manager/Staff see only their location's orders
+            filter_location_id = current_user.location_id
+    
+    orders = await crud.get_active_orders(
+        db, 
+        device_id=device_id,
+        location_id=filter_location_id,
+        organization_id=filter_organization_id
+    )
     return orders
 
 
@@ -98,6 +185,18 @@ async def get_order(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+@router.get("/locations/public", response_model=List[LocationPublicResponse])
+async def get_public_locations(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get list of all active locations for display setup.
+    Public endpoint (no auth required).
+    """
+    locations = await crud.get_all_active_locations_with_org(db)
+    return locations
 
 
 @router.get("/track/{token}", response_model=OrderPublicResponse)
@@ -123,7 +222,8 @@ async def track_order(
 async def update_order_status(
     order_id: UUID,
     status_update: OrderUpdate,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user)
 ):
     """
     Update order status and notify connected clients.
@@ -132,6 +232,20 @@ async def update_order_status(
     current_order = await crud.get_order_by_id(db, order_id)
     if not current_order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check access
+    if current_user:
+        if current_user.role == UserRole.ADMIN:
+            pass  # Admin can update any order
+        elif current_user.role == UserRole.OWNER:
+            # Check if order belongs to user's organization
+            location = await crud.get_location_by_id(db, current_order.location_id)
+            if not location or location.organization_id != current_user.organization_id:
+                raise HTTPException(status_code=403, detail="Access denied")
+        else:
+            # Manager/Staff can only update orders in their location
+            if current_order.location_id != current_user.location_id:
+                raise HTTPException(status_code=403, detail="Access denied")
     
     old_status = current_order.status
     
@@ -153,11 +267,11 @@ async def update_order_status(
     )
     await manager.send_to_client(order.token, status_message.dict())
     
-    # Notify all staff
+    # Notify all staff for this location
     await manager.broadcast_to_staff({
         "type": "STATUS_UPDATE",
         "order": OrderResponse.model_validate(order).model_dump(mode='json')
-    })
+    }, location_id=str(order.location_id))
     
     logger.info(f"Updated order {order.human_id} to status {order.status}")
     
@@ -165,12 +279,13 @@ async def update_order_status(
 
 
 @router.websocket("/ws/staff")
-async def websocket_staff(websocket: WebSocket):
+async def websocket_staff(websocket: WebSocket, location_id: Optional[str] = None):
     """
     WebSocket endpoint for staff dashboard.
-    Receives updates about all orders.
+    Receives updates about orders.
+    Optional location_id param to filter by location (None = admin, sees all).
     """
-    await manager.connect_staff(websocket)
+    await manager.connect_staff(websocket, location_id)
     try:
         while True:
             # Keep connection alive, listen for pings
@@ -184,12 +299,12 @@ async def websocket_staff(websocket: WebSocket):
 
 
 @router.websocket("/ws/display/{device_id}")
-async def websocket_display(websocket: WebSocket, device_id: str):
+async def websocket_display(websocket: WebSocket, device_id: str, location_id: Optional[str] = None):
     """
     WebSocket endpoint for display devices.
     Receives commands to show QR codes.
     """
-    await manager.connect_display(device_id, websocket)
+    await manager.connect_display(device_id, websocket, location_id)
     try:
         while True:
             # Keep connection alive, listen for acknowledgments

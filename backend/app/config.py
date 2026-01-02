@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     
     # QR display timeout (seconds)
     qr_display_timeout: int = 30
+    
+    # JWT settings
+    secret_key: str = "your-secret-key-change-in-production-make-it-long-and-random"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+    
+    # Default admin credentials (change in production!)
+    admin_username: str = "admin"
+    admin_password: str = "admin123"
+    
+    # Demo account credentials
+    demo_username: str = "demo"
+    demo_password: str = "demo123"
 
     class Config:
         env_file = ".env"

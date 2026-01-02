@@ -9,6 +9,37 @@ export const DEVICE_IDS = [
   { id: 'tab_4', name: 'Планшет 4' },
 ];
 
+// Location management
+export const getLocationId = () => {
+  return localStorage.getItem('location_id') || null;
+};
+
+export const setLocationId = (locationId) => {
+  localStorage.setItem('location_id', locationId);
+};
+
+export const getLocationName = () => {
+  return localStorage.getItem('location_name') || null;
+};
+
+export const setLocationName = (name) => {
+  localStorage.setItem('location_name', name);
+};
+
+// Получение списка всех локаций (публичный эндпоинт для display)
+export const fetchLocations = async () => {
+  try {
+    const response = await fetch(`${API_URL}/locations/public`);
+    if (response.ok) {
+      return await response.json();
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching locations:', error);
+    return [];
+  }
+};
+
 export const getDeviceId = () => {
   return localStorage.getItem('device_id') || null;
 };
@@ -31,10 +62,14 @@ export const getCurrentQR = () => {
   return data ? JSON.parse(data) : null;
 };
 
-// Получение активного заказа для устройства
-export const fetchActiveOrder = async (deviceId) => {
+// Получение активного заказа для устройства и локации
+export const fetchActiveOrder = async (deviceId, locationId = null) => {
   try {
-    const response = await fetch(`${API_URL}/orders/active?device_id=${deviceId}`);
+    let url = `${API_URL}/orders/active?device_id=${deviceId}`;
+    if (locationId) {
+      url += `&location_id=${locationId}`;
+    }
+    const response = await fetch(url);
     if (response.ok) {
       const orders = await response.json();
       // Находим заказ со статусом pending (ещё не отсканирован)
@@ -48,11 +83,14 @@ export const fetchActiveOrder = async (deviceId) => {
   }
 };
 
-export const connectWebSocket = (deviceId, onMessage) => {
-  const ws = new WebSocket(`${WS_URL}/ws/display/${deviceId}`);
+export const connectWebSocket = (deviceId, onMessage, locationId = null) => {
+  const url = locationId 
+    ? `${WS_URL}/ws/display/${deviceId}?location_id=${locationId}`
+    : `${WS_URL}/ws/display/${deviceId}`;
+  const ws = new WebSocket(url);
   
   ws.onopen = () => {
-    console.log('Display WebSocket connected:', deviceId);
+    console.log('Display WebSocket connected:', deviceId, 'location:', locationId);
   };
   
   ws.onmessage = (event) => {

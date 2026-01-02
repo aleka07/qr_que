@@ -4,6 +4,7 @@ import logging
 
 from app.config import get_settings
 from app.routes import router
+from app.routes_auth import router as auth_router
 from app.database import engine, Base
 
 # Configure logging
@@ -35,6 +36,7 @@ app.add_middleware(
 
 # Include routes
 app.include_router(router, prefix="/api", tags=["orders"])
+app.include_router(auth_router, prefix="/api", tags=["auth", "organizations", "locations", "users"])
 
 
 @app.on_event("startup")
