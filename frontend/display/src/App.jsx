@@ -1,13 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import QRDisplay from './components/QRDisplay';
-import { 
-  getDeviceId, setDeviceId, DEVICE_IDS, 
+import Login from './components/Login';
+import {
+  getDeviceId, setDeviceId, DEVICE_IDS,
   connectWebSocket, saveCurrentQR, getCurrentQR, fetchActiveOrder,
-  getLocationId, setLocationId, getLocationName, setLocationName, fetchLocations
+  getLocationId, setLocationId, getLocationName, setLocationName, fetchLocations,
+  login, logout, isAuthenticated, getCurrentUser, getMe
 } from './api';
 import './App.css';
 
 function App() {
+  // Auth state
+  const [authenticated, setAuthenticated] = useState(isAuthenticated());
+  const [user, setUser] = useState(getCurrentUser());
+  const [loginError, setLoginError] = useState(null);
+
+  // App state
   const [deviceId, setDeviceIdState] = useState('');
   const [locationId, setLocationIdState] = useState('');
   const [locationName, setLocationNameState] = useState('');
@@ -18,13 +26,39 @@ function App() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Check auth on mount
   useEffect(() => {
-    const init = async () => {
-      const savedLocationId = getLocationId();
-      const savedLocationName = getLocationName();
-      const savedDeviceId = getDeviceId();
-      
-      if (savedLocationId && savedDeviceId) {
+    if (authenticated) {
+      checkAuth();
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const checkAuth = async () => {
+    try {
+      const userData = await getMe();
+      setUser(userData);
+      init(userData);
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      handleLogout();
+      setLoading(false);
+    }
+  };
+
+  const init = async (userData) => {
+    const savedLocationId = getLocationId();
+    const savedLocationName = getLocationName();
+    const savedDeviceId = getDeviceId();
+
+    if (savedLocationId && savedDeviceId) {
+      // Verify user still has access to this location
+      const locs = await fetchLocations();
+      setLocations(locs);
+
+      const hasAccess = locs.some(loc => loc.id === savedLocationId);
+      if (hasAccess) {
         setLocationIdState(savedLocationId);
         setLocationNameState(savedLocationName || '');
         setDeviceIdState(savedDeviceId);
@@ -34,21 +68,23 @@ function App() {
           setQrData(savedQR);
         }
       } else {
-        // Load locations for setup
-        const locs = await fetchLocations();
-        setLocations(locs);
+        // No access anymore, reset
         setShowSetup(true);
-        setSetupStep(savedLocationId ? 'device' : 'location');
-        if (savedLocationId) {
-          setLocationIdState(savedLocationId);
-          setLocationNameState(savedLocationName || '');
-        }
+        setSetupStep('location');
       }
-      setLoading(false);
-    };
-    
-    init();
-  }, []);
+    } else {
+      // Load locations for setup
+      const locs = await fetchLocations();
+      setLocations(locs);
+      setShowSetup(true);
+      setSetupStep(savedLocationId ? 'device' : 'location');
+      if (savedLocationId) {
+        setLocationIdState(savedLocationId);
+        setLocationNameState(savedLocationName || '');
+      }
+    }
+    setLoading(false);
+  };
 
   // При подключении проверяем активный заказ на сервере
   useEffect(() => {
@@ -73,7 +109,7 @@ function App() {
     if (!deviceId || !locationId) return;
 
     const ws = connectWebSocket(deviceId, handleWebSocketMessage, locationId);
-    
+
     ws.addEventListener('open', () => setConnected(true));
     ws.addEventListener('close', () => setConnected(false));
 
@@ -82,7 +118,7 @@ function App() {
 
   const handleWebSocketMessage = (message) => {
     console.log('WebSocket message:', message);
-    
+
     if (message.type === 'SHOW_QR') {
       const qr = {
         url: message.url,
@@ -97,11 +133,30 @@ function App() {
     }
   };
 
-  // Убираем автоматический timeout - QR висит пока не отсканируют
-  const handleQRScanned = () => {
-    console.log('QR scanned, clearing display');
+  // Login handlers
+  const handleLogin = async (username, password) => {
+    setLoginError(null);
+    try {
+      const data = await login(username, password);
+      setUser(data.user);
+      setAuthenticated(true);
+      setLoading(true);
+      init(data.user);
+    } catch (error) {
+      setLoginError(error.message || 'Ошибка входа');
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    setAuthenticated(false);
+    setUser(null);
+    setDeviceIdState('');
+    setLocationIdState('');
+    setLocationNameState('');
     setQrData(null);
-    saveCurrentQR(null);
+    setLocations([]);
+    setShowSetup(false);
   };
 
   const handleSelectLocation = (loc) => {
@@ -129,6 +184,11 @@ function App() {
     saveCurrentQR(null);
   };
 
+  // Show login if not authenticated
+  if (!authenticated) {
+    return <Login onLogin={handleLogin} error={loginError} />;
+  }
+
   if (loading) {
     return <div className="app"><div className="loading">Загрузка...</div></div>;
   }
@@ -148,10 +208,11 @@ function App() {
       <div className="app">
         <div className="setup-screen">
           <div className="setup-content">
-            <div className="logo">🎯</div>
+            <div className="logo">📺</div>
             <h1>QR Queue Display</h1>
+            <p className="user-badge">👤 {user?.full_name || user?.username}</p>
             <p>Выберите точку</p>
-            
+
             <div className="location-list">
               {Object.entries(grouped).map(([orgName, locs]) => (
                 <div key={orgName} className="location-group">
@@ -170,6 +231,10 @@ function App() {
                 </div>
               ))}
             </div>
+
+            <button className="logout-btn" onClick={handleLogout}>
+              🚪 Выйти
+            </button>
           </div>
         </div>
       </div>
@@ -182,13 +247,13 @@ function App() {
       <div className="app">
         <div className="setup-screen">
           <div className="setup-content">
-            <div className="logo">🎯</div>
+            <div className="logo">📺</div>
             <h1>QR Queue Display</h1>
             <p className="selected-location">
               📍 {locationName}
             </p>
             <p>Выберите номер планшета</p>
-            
+
             <div className="device-buttons">
               {DEVICE_IDS.map((device) => (
                 <button
@@ -200,8 +265,8 @@ function App() {
                 </button>
               ))}
             </div>
-            
-            <button 
+
+            <button
               className="back-button"
               onClick={() => setSetupStep('location')}
             >
@@ -225,25 +290,29 @@ function App() {
       ) : (
         <div className="idle-screen">
           <div className="idle-content">
-            <div className="logo">🎯</div>
+            <div className="logo">📺</div>
             <h1>QR Queue Display</h1>
             <p>Ожидание заказа...</p>
-            
+
             <div className="device-info">
               <div className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
               <span>{connected ? 'Подключено' : 'Нет соединения'}</span>
             </div>
-            
+
             <div className="location-info">
               📍 {locationName}
             </div>
-            
+
             <div className="device-id">
               <strong>{currentDevice?.name || deviceId}</strong>
               <button className="change-device-btn" onClick={handleChangeDevice}>
                 Настройки
               </button>
             </div>
+
+            <button className="logout-btn-small" onClick={handleLogout}>
+              Выйти
+            </button>
           </div>
         </div>
       )}

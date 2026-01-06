@@ -17,8 +17,36 @@ from app.auth import get_password_hash
 
 # ==================== Order CRUD ====================
 
+async def check_duplicate_active_order(
+    db: AsyncSession, 
+    human_id: str, 
+    location_id: UUID
+) -> Optional[Order]:
+    """Check if there's an active order with same human_id at this location."""
+    result = await db.execute(
+        select(Order).where(
+            and_(
+                Order.human_id == human_id,
+                Order.location_id == location_id,
+                Order.status.in_([
+                    OrderStatus.PENDING,
+                    OrderStatus.SCANNED,
+                    OrderStatus.PREPARING,
+                    OrderStatus.READY
+                ])
+            )
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def create_order(db: AsyncSession, order_data: OrderCreate, location_id: UUID) -> Order:
-    """Create a new order."""
+    """Create a new order. Raises ValueError if duplicate active order exists."""
+    # Check for duplicate
+    existing = await check_duplicate_active_order(db, order_data.human_id, location_id)
+    if existing:
+        raise ValueError(f"Заказ {order_data.human_id} уже существует и ещё активен")
+    
     token = generate_token()
     
     order = Order(

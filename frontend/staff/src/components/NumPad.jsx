@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import './NumPad.css';
 
-const NumPad = ({ value, onChange, onSubmit, deviceId, onDeviceChange }) => {
+const NumPad = ({ value, onChange, onSubmit, deviceId, onDeviceChange, loading }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitTimeoutRef = useRef(null);
+
   const handleNumberClick = (num) => {
     onChange(value + num);
   };
@@ -14,15 +17,30 @@ const NumPad = ({ value, onChange, onSubmit, deviceId, onDeviceChange }) => {
     onChange(value.slice(0, -1));
   };
 
-  const handleSubmit = () => {
-    if (value.trim() && deviceId) {
-      onSubmit();
+  const handleSubmit = async () => {
+    if (value.trim() && deviceId && !isSubmitting && !loading) {
+      // Prevent double-clicks with local state
+      setIsSubmitting(true);
+
+      // Clear any pending timeout
+      if (submitTimeoutRef.current) {
+        clearTimeout(submitTimeoutRef.current);
+      }
+
+      try {
+        await onSubmit();
+      } finally {
+        // Reset after a short delay to prevent rapid re-clicks
+        submitTimeoutRef.current = setTimeout(() => {
+          setIsSubmitting(false);
+        }, 500);
+      }
     }
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && value.trim() && deviceId) {
-      onSubmit();
+    if (e.key === 'Enter' && value.trim() && deviceId && !isSubmitting && !loading) {
+      handleSubmit();
     } else if (e.key === 'Backspace') {
       handleBackspace();
     } else if (/^[0-9]$/.test(e.key)) {
@@ -33,14 +51,16 @@ const NumPad = ({ value, onChange, onSubmit, deviceId, onDeviceChange }) => {
   React.useEffect(() => {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [value, deviceId]);
+  }, [value, deviceId, isSubmitting, loading]);
+
+  const isDisabled = !value.trim() || !deviceId || isSubmitting || loading;
 
   return (
     <div className="numpad-container">
       <div className="numpad-header">
         <h2>Создать заказ</h2>
       </div>
-      
+
       <div className="device-selector">
         <label>Планшет:</label>
         <select value={deviceId} onChange={(e) => onDeviceChange(e.target.value)}>
@@ -66,30 +86,31 @@ const NumPad = ({ value, onChange, onSubmit, deviceId, onDeviceChange }) => {
             key={num}
             className="numpad-button"
             onClick={() => handleNumberClick(num.toString())}
+            disabled={isSubmitting || loading}
           >
             {num}
           </button>
         ))}
-        
-        <button className="numpad-button" onClick={handleClear}>
+
+        <button className="numpad-button" onClick={handleClear} disabled={isSubmitting || loading}>
           C
         </button>
-        
-        <button className="numpad-button" onClick={() => handleNumberClick('0')}>
+
+        <button className="numpad-button" onClick={() => handleNumberClick('0')} disabled={isSubmitting || loading}>
           0
         </button>
-        
-        <button className="numpad-button" onClick={handleBackspace}>
+
+        <button className="numpad-button" onClick={handleBackspace} disabled={isSubmitting || loading}>
           ←
         </button>
       </div>
 
       <button
-        className="numpad-submit"
+        className={`numpad-submit ${isSubmitting || loading ? 'submitting' : ''}`}
         onClick={handleSubmit}
-        disabled={!value.trim() || !deviceId}
+        disabled={isDisabled}
       >
-        Создать заказ (Enter)
+        {isSubmitting || loading ? 'Создание...' : 'Создать заказ (Enter)'}
       </button>
     </div>
   );

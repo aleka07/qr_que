@@ -98,6 +98,9 @@ async def create_order(
     
     except HTTPException:
         raise
+    except ValueError as e:
+        # Duplicate order error
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating order: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -206,10 +209,37 @@ async def track_order(
 ):
     """
     Get order status by client token (public endpoint).
+    If order is still 'pending', automatically updates to 'preparing'
+    and notifies staff/display via WebSocket.
     """
     order = await crud.get_order_by_token(db, token)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Auto-transition from pending to preparing when client opens tracking page
+    if order.status == OrderStatus.PENDING:
+        # Update status to preparing
+        order = await crud.update_order_status(db, order.id, OrderStatus.PREPARING)
+        
+        # Clear QR on display
+        await manager.send_to_display(order.device_id, {
+            "type": "CLEAR_QR"
+        })
+        
+        # Notify staff about status change
+        await manager.broadcast_to_staff({
+            "type": "STATUS_UPDATE",
+            "order": OrderResponse.model_validate(order).model_dump(mode='json')
+        }, location_id=str(order.location_id))
+        
+        # Notify client via WebSocket (if already connected)
+        status_message = StatusUpdateMessage(
+            status=order.status,
+            human_id=order.human_id
+        )
+        await manager.send_to_client(order.token, status_message.dict())
+        
+        logger.info(f"Order {order.human_id} auto-transitioned to preparing (client opened tracking)")
     
     return OrderPublicResponse(
         human_id=order.human_id,

@@ -9,7 +9,7 @@ function Login({ onLogin, error }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username || !password) return;
-    
+
     setLoading(true);
     try {
       await onLogin(username, password);
@@ -25,7 +25,7 @@ function Login({ onLogin, error }) {
           <h1>🎯 QR Que</h1>
           <p>Staff Dashboard</p>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
             <label htmlFor="username">Логин</label>
@@ -39,7 +39,7 @@ function Login({ onLogin, error }) {
               disabled={loading}
             />
           </div>
-          
+
           <div className="form-group">
             <label htmlFor="password">Пароль</label>
             <input
@@ -52,25 +52,21 @@ function Login({ onLogin, error }) {
               disabled={loading}
             />
           </div>
-          
+
           {error && (
             <div className="login-error">
               {error}
             </div>
           )}
-          
-          <button 
-            type="submit" 
+
+          <button
+            type="submit"
             className="login-button"
             disabled={loading || !username || !password}
           >
             {loading ? 'Вход...' : 'Войти'}
           </button>
         </form>
-        
-        <div className="login-footer">
-          <p>Demo: demo / demo123</p>
-        </div>
       </div>
     </div>
   );

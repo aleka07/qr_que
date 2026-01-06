@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import NumPad from './components/NumPad';
 import OrderList from './components/OrderList';
 import Login from './components/Login';
-import { 
-  createOrder, 
-  getActiveOrders, 
-  updateOrderStatus, 
+import AdminPanel from './components/AdminPanel';
+import {
+  createOrder,
+  getActiveOrders,
+  updateOrderStatus,
   connectWebSocket,
   login,
   logout,
@@ -20,15 +21,18 @@ function App() {
   const [authenticated, setAuthenticated] = useState(isAuthenticated());
   const [user, setUser] = useState(getCurrentUser());
   const [loginError, setLoginError] = useState(null);
-  
+
   const [orders, setOrders] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [deviceId, setDeviceId] = useState('tab_1');
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState(null);
-  
+
   const [locations, setLocations] = useState([]);
   const [selectedLocation, setSelectedLocation] = useState(null);
+
+  // Tab state for admin/owner
+  const [activeTab, setActiveTab] = useState('orders');
 
   // Check auth on mount
   useEffect(() => {
@@ -54,7 +58,7 @@ function App() {
   // Connect WebSocket
   useEffect(() => {
     if (!authenticated) return;
-    
+
     const locationId = selectedLocation?.id || (user?.location_id);
     const ws = connectWebSocket(handleWebSocketMessage, locationId);
     return () => ws.close();
@@ -64,7 +68,7 @@ function App() {
     try {
       const userData = await getMe();
       setUser(userData);
-      
+
       // If user has a specific location, select it
       if (userData.location_id) {
         setSelectedLocation({ id: userData.location_id });
@@ -79,7 +83,7 @@ function App() {
     try {
       const data = await getLocations();
       setLocations(data);
-      
+
       // Auto-select first location if user doesn't have one assigned
       if (!user.location_id && data.length > 0 && !selectedLocation) {
         setSelectedLocation(data[0]);
@@ -111,7 +115,7 @@ function App() {
       const data = await login(username, password);
       setUser(data.user);
       setAuthenticated(true);
-      
+
       if (data.user.location_id) {
         setSelectedLocation({ id: data.user.location_id });
       }
@@ -127,13 +131,19 @@ function App() {
     setOrders([]);
     setSelectedLocation(null);
     setLocations([]);
+    setActiveTab('orders');
   };
 
   const handleWebSocketMessage = (message) => {
     console.log('WebSocket message:', message);
-    
+
     if (message.type === 'NEW_ORDER') {
-      setOrders((prev) => [message.order, ...prev]);
+      // Deduplicate: only add if order doesn't already exist
+      setOrders((prev) => {
+        const exists = prev.some(o => o.id === message.order.id);
+        if (exists) return prev;
+        return [message.order, ...prev];
+      });
       showNotification(`Новый заказ: ${message.order.human_id}`, 'success');
     } else if (message.type === 'STATUS_UPDATE') {
       setOrders((prev) =>
@@ -155,7 +165,9 @@ function App() {
       showNotification(`Заказ ${inputValue} создан`, 'success');
     } catch (error) {
       console.error('Failed to create order:', error);
-      showNotification('Ошибка создания заказа', 'error');
+      // Show server error message if available
+      const msg = error.message || 'Ошибка создания заказа';
+      showNotification(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -181,21 +193,38 @@ function App() {
   }
 
   const canChangeLocation = user?.role === 'admin' || user?.role === 'owner';
+  const canAccessAdmin = user?.role === 'admin' || user?.role === 'owner';
 
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-left">
           <h1>🎯 Staff Dashboard</h1>
-          {selectedLocation && (
+          {selectedLocation && activeTab === 'orders' && (
             <span className="location-badge">
               📍 {selectedLocation.name || 'Loading...'}
             </span>
           )}
         </div>
         <div className="header-right">
-          {canChangeLocation && locations.length > 1 && (
-            <select 
+          {canAccessAdmin && (
+            <div className="header-tabs">
+              <button
+                className={`tab-btn ${activeTab === 'orders' ? 'active' : ''}`}
+                onClick={() => setActiveTab('orders')}
+              >
+                📋 Заказы
+              </button>
+              <button
+                className={`tab-btn ${activeTab === 'admin' ? 'active' : ''}`}
+                onClick={() => setActiveTab('admin')}
+              >
+                ⚙️ Управление
+              </button>
+            </div>
+          )}
+          {canChangeLocation && locations.length > 1 && activeTab === 'orders' && (
+            <select
               className="location-select"
               value={selectedLocation?.id || ''}
               onChange={(e) => {
@@ -223,21 +252,28 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
-        <aside className="app-sidebar">
-          <NumPad
-            value={inputValue}
-            onChange={setInputValue}
-            onSubmit={handleSubmit}
-            deviceId={deviceId}
-            onDeviceChange={setDeviceId}
-          />
-        </aside>
+      {activeTab === 'orders' ? (
+        <main className="app-main">
+          <aside className="app-sidebar">
+            <NumPad
+              value={inputValue}
+              onChange={setInputValue}
+              onSubmit={handleSubmit}
+              deviceId={deviceId}
+              onDeviceChange={setDeviceId}
+              loading={loading}
+            />
+          </aside>
 
-        <section className="app-content">
-          <OrderList orders={orders} onStatusChange={handleStatusChange} />
-        </section>
-      </main>
+          <section className="app-content">
+            <OrderList orders={orders} onStatusChange={handleStatusChange} />
+          </section>
+        </main>
+      ) : (
+        <main className="app-main-full">
+          <AdminPanel currentUser={user} />
+        </main>
+      )}
 
       {notification && (
         <div className={`notification notification-${notification.type}`}>

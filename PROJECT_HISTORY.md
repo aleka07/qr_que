@@ -338,6 +338,55 @@ docker-compose exec backend python -m app.seed
 - Выбор локации в Display App
 - Форма входа в Staff App
 
+### v3.0 (Display Auth + Admin Panel + Стабильность)
+- Авторизация Display App с фильтрацией локаций
+- Админ-панель: пользователи, организации, локации
+- Автоматический переход pending→preparing при сканировании QR
+- Защита от дубликатов заказов
+- Поиск пользователей в админ-панели
+- Удалены демо-ссылки из UI
+
 ---
 
-*Документ создан: 2026-01-02*
+## 🕐 Фаза 12: Display Auth + Admin Panel (02.01.2026, 17:50 - 18:05)
+> Авторизация для Display App и административная панель
+
+| Файл | Изменения |
+|------|-----------|
+| `display/components/Login.jsx` | **NEW** Форма входа для Display |
+| `display/components/Login.css` | **NEW** Стили логина |
+| `display/api.js` | +login, logout, getMe, isAuthenticated |
+| `display/App.jsx` | Авторизация, фильтрация локаций, logout |
+| `display/App.css` | +стили logout, user-badge |
+| `staff/components/AdminPanel.jsx` | **NEW** CRUD пользователей/организаций/локаций |
+| `staff/components/AdminPanel.css` | **NEW** Стили админ-панели с табами |
+| `staff/api.js` | +getUsers, createUser, updateUser, resetUserPassword, getOrganizations, createOrganization, updateOrganization, createLocation, updateLocation |
+| `staff/App.jsx` | +вкладки "Заказы" / "Управление" |
+| `staff/App.css` | +стили табов |
+| `staff/components/Login.jsx` | Удалена демо-подсказка |
+| `backend/routes.py` | `/track/{token}` автоматически pending→preparing |
+
+---
+
+## 🕐 Фаза 13: Защита от дубликатов + Поиск (02.01.2026, 18:15 - 18:30)
+> Исправление багов и UX улучшения
+
+| Файл | Изменения |
+|------|-----------|
+| `backend/crud.py` | +check_duplicate_active_order, create_order проверяет дубликаты |
+| `backend/routes.py` | +ValueError → 400 Bad Request с сообщением |
+| `staff/components/NumPad.jsx` | +debounce защита от двойного клика |
+| `staff/App.jsx` | +дедупликация заказов в WebSocket, +loading prop |
+| `staff/components/AdminPanel.jsx` | +userSearch фильтр |
+| `staff/components/AdminPanel.css` | +search-input стили |
+
+### Ключевые изменения:
+1. **Защита от дубликатов**: Нельзя создать заказ с номером, который уже активен на этой локации
+2. **Debounce**: Кнопка "Создать заказ" блокируется на 500мс после нажатия
+3. **WebSocket дедупликация**: Если такой заказ уже есть в списке, дубликат игнорируется
+4. **Поиск пользователей**: Фильтр по имени, логину, email, организации, локации
+
+---
+
+*Документ обновлён: 2026-01-02*
+https://display.kaskyralmaty.dev/
